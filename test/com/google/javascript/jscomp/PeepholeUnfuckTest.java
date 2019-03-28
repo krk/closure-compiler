@@ -54,15 +54,26 @@ public final class PeepholeUnfuckTest extends CompilerTestCase {
     test(js, expected);
   }
 
+  private void foldSame(String js) {
+    test(js, js);
+  }
+
   /** Check that removing blocks with 1 child works */
   @Test
-  public void testFold() {
+  public void testUndefined() {
     fold("[][[]]", "undefined");
     fold("var a =[ [][[]] ]", "var a=[undefined]");
+    fold("var a = [][[]]", "var a=undefined");
   }
 
   @Test
-  public void testFoldAssignments() {
-    fold("var a = [][[]]", "var a=undefined");
+  public void testStringIndexedString() {
+    fold("\"0\"[\"0\"]", "\"0\"");
+    fold("\"falseundefined\"[\"10\"]", "\"i\"");
+
+    foldSame("\"falseundefined\"[\"-10\"]");
+    foldSame("\"falseundefined\"[\"42\"]");
+    foldSame("\"falseundefined\"[\"a\"]");
+    foldSame("9999[\"2\"]");
   }
 }

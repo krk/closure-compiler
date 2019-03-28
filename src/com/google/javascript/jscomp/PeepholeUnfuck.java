@@ -31,7 +31,45 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryStringIndexedString(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Node tryStringIndexedString(Node n) {
+    if (!n.isGetElem() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isString()) {
+      return n;
+    }
+    String leftStr = left.getString();
+
+    Node right = n.getLastChild();
+    if (!right.isString()) {
+      return n;
+    }
+    int index;
+    try {
+      index = Integer.parseInt(right.getString());
+    } catch (NumberFormatException e) {
+      return n;
+    }
+    if (index < 0 || index >= leftStr.length()) {
+      return n;
+    }
+
+    // We have `"string"["integer"]`.
+    String result = Character.toString(leftStr.charAt(index));
+    Node replacement = IR.string(result);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryUndefined(Node n) {
