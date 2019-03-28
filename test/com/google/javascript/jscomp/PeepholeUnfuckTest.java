@@ -39,6 +39,7 @@ public final class PeepholeUnfuckTest extends CompilerTestCase {
 
   @Override
   protected CompilerPass getProcessor(final Compiler compiler) {
+
     PeepholeOptimizationsPass peepholePass =
         new PeepholeOptimizationsPass(compiler, getName(), new PeepholeUnfuck());
     peepholePass.setRetraverseOnChange(false);
@@ -76,4 +77,27 @@ public final class PeepholeUnfuckTest extends CompilerTestCase {
     foldSame("\"falseundefined\"[\"a\"]");
     foldSame("9999[\"2\"]");
   }
+
+  // TODO These give JSC_PARSE_ERROR whereas they produce the expected output when fed to the
+  // compiler.
+  // @Test
+  // public void testArrayLiteralFunctionStringCoercion() {
+  // foldSame("[].filter");
+  // foldSame("+[].filter");
+  //
+  // fold("1+[].filter", "1function filter() {\n [native code]\n}");
+  // fold("!1+[].filter", "falsefunction filter() {\n [native code]\n}");
+  // fold("!0+[].concat", "truefunction concat() {\n [native code]\n}");
+  // fold("\"abc\"+[].propertyIsEnumerable",
+  // "truefunction propertyIsEnumerable() {\n [native code]\n}");
+  // fold("1.256+[].filter", "1.256function filter() {\n [native code]\n}");
+  // fold("[]+[].filter", "function filter() {\n [native code]\n}");
+  //
+  // fold("[].filter+1", "function filter() {\n [native code]\n}1");
+  // fold("[].filter+!1", "function filter() {\n [native code]\n}false");
+  // fold("[].filter+!0", "function filter() {\n [native code]\n}true");
+  // fold("[].filter+\"abc\"", "function filter() {\n [native code]\n}abc");
+  // fold("[].filter+1.256", "function filter() {\n [native code]\n}1.256");
+  // fold("[].filter+[]", "function filter() {\n [native code]\n}");
+  // }
 }

@@ -14,10 +14,23 @@
 
 package com.google.javascript.jscomp;
 
+import com.google.javascript.rhino.Token;
+import java.text.DecimalFormat;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import com.google.javascript.rhino.IR;
 import com.google.javascript.rhino.Node;
 
 class PeepholeUnfuck extends AbstractPeepholeOptimization {
+
+  private static final Set<String> arrayFunctions = new HashSet<String>(
+      Arrays.asList("concat", "copyWithin", "entries", "every", "fill", "filter", "find",
+          "findIndex", "flat", "flatMap", "forEach", "includes", "indexOf", "join", "keys",
+          "lastIndexOf", "map", "pop", "push", "reduce", "reduceRight", "reverse", "shift", "slice",
+          "some", "sort", "splice", "toLocaleString", "toSource", "toString", "unshift", "values"));
+
+  private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
 
   PeepholeUnfuck() {}
 
@@ -36,7 +49,72 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryArrayLiteralFunctionStringCoercion(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Node tryArrayLiteralFunctionStringCoercion(Node n) {
+    if (!n.isGetProp() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node add = n.getParent();
+    if (!add.isAdd()) {
+      return n;
+    }
+
+    // First operand can be a boolean, string, number or an arraylit `[]`.
+    String affix;
+
+    Boolean isReversed = add.getFirstChild() == n;
+    Node op = isReversed ? add.getSecondChild() : add.getFirstChild();
+    switch (op.getToken()) {
+      case TRUE:
+        affix = "true";
+        break;
+      case FALSE:
+        affix = "false";
+        break;
+      case STRING:
+        affix = op.getString();
+        break;
+      case NUMBER:
+        affix = PeepholeUnfuck.doubleIntFormat.format(op.getDouble());
+        break;
+      case ARRAYLIT:
+        affix = "";
+        break;
+      default:
+        return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isArrayLit()) {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!right.isString()) {
+      return n;
+    }
+
+    String name = right.getString();
+    if (!PeepholeUnfuck.arrayFunctions.contains(name)) {
+      return n;
+    }
+
+    String decl = "function " + name + "() {\n    [native code]\n}";
+
+    // We have `X + [].func`.
+    String result = isReversed ? decl + affix : affix + decl;
+    Node replacement = IR.string(result);
+    add.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryStringIndexedString(Node n) {

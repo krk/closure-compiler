@@ -7020,4 +7020,24 @@ public final class IntegrationTest extends IntegrationTestCase {
               "}")
         });
   }
+
+  @Test
+  public void testPeepholeUnfuck() {
+    CompilerOptions options = createCompilerOptions();
+    options.setLanguageIn(LanguageMode.STABLE);
+    options.setLanguageOut(LanguageMode.STABLE);
+    options.addWarningsGuard(new DiagnosticGroupWarningsGuard(
+        DiagnosticGroups.CHECK_TYPES, CheckLevel.OFF));
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    test(
+        options,
+        "(![]+[])[+!+[]]+(![]+[])[!+[]+!+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]+(!![]+[])[+[]]+(![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[!+[]+!+[]+[+[]]]+[+!+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[!+[]+!+[]+[+[]]]",
+        "\"alert(1)\"");
+    
+    test(
+        options,
+        "(!1+[][\"f\"+([!1]+[][[]])[\"10\"]+\"lter\"])[\"20\"]+[1]+(!0+[][\"f\"+([!1]+[][[]])[\"10\"]+\"lter\"])[\"20\"]",
+        "\"(1)\"");
+  }
 }
