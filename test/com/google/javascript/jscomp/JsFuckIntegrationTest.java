@@ -67,4 +67,17 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "Function(\"return/\"+false+\"/\")()", ""); // TODO For some reason result is
                                                               // empty, expected: "/false/"
   }
+
+  @Test
+  public void testLetters() {
+    CompilerOptions options = createCompilerOptions();
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+
+    test(options, "(false+\"\")[1]", "\"a\"");
+    test(options, "([][\"entries\"]()+\"\")[2]", "\"b\"");
+    test(options, "([][\"fill\"]+\"\")[3]", "\"c\"");
+    test(options, "(undefined+\"\")[2]", "\"d\"");
+    test(options, "(true+\"\")[3]", "\"e\"");
+    test(options, "(false+\"\")[0]", "\"f\"");
+  }
 }

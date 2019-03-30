@@ -68,7 +68,46 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryUnfuckArrayEntries(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Node tryUnfuckArrayEntries(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node call = n.getFirstChild();
+    if (!call.isCall() || !call.hasOneChild()) {
+      return n;
+    }
+
+    Node string = n.getLastChild();
+    if (!string.isString()) {
+      return n;
+    }
+
+    Node getProp = call.getFirstChild();
+    if (!getProp.isGetProp() || !getProp.hasTwoChildren()) {
+      return n;
+    }
+    if (!getProp.getFirstChild().isArrayLit()) {
+      return n;
+    }
+    Node entries = getProp.getLastChild();
+    if (!entries.isString() || entries.getString() != "entries") {
+      return n;
+    }
+
+    String suffix = string.getString();
+    Node replacement = IR.string("[object Array Iterator]" + suffix);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryFunctionConstructorInvocation(Node n) {
