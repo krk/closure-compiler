@@ -79,5 +79,6 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "(undefined+\"\")[2]", "\"d\"");
     test(options, "(true+\"\")[3]", "\"e\"");
     test(options, "(false+\"\")[0]", "\"f\"");
+    test(options, "(false+[0]+String)[20]", "\"g\"");
   }
 }

@@ -34,6 +34,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
   private static final Set<String> evalArrayFunctions =
       new HashSet<String>(Arrays.asList("fill", "filter", "sort"));
 
+  private static final Set<String> constructors = new HashSet<String>(
+      Arrays.asList("Array", "Number", "String", "Boolean", "Function", "RegExp"));
+
   private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
 
   PeepholeUnfuck() {}
@@ -73,7 +76,64 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryConstructorCoercion(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private String getNativeDecl(String name) {
+    return "function " + name + "() {\n    [native code]\n}";
+  }
+
+  private Node tryConstructorCoercion(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    Node right = n.getLastChild();
+    if (!left.isName() && !right.isName()) {
+      return n;
+    }
+
+    Node replacement = null;
+
+    if (left.isName() && right.isName()) {
+      String leftName = left.getString();
+      String rightName = right.getString();
+      if (constructors.contains(leftName) && constructors.contains(rightName)) {
+        replacement = IR.string(getNativeDecl(leftName) + getNativeDecl(rightName));
+      } else if (constructors.contains(leftName)) {
+        right.detach();
+        replacement = IR.add(IR.string(getNativeDecl(leftName)), right);
+      } else if (constructors.contains(rightName)) {
+        left.detach();
+        replacement = IR.add(left, IR.string(getNativeDecl(rightName)));
+      }
+    } else if (left.isName()) {
+      String leftName = left.getString();
+      if (constructors.contains(leftName)) {
+        right.detach();
+        replacement = IR.add(IR.string(getNativeDecl(leftName)), right);
+      }
+    } else if (right.isName()) {
+      String rightName = right.getString();
+      if (constructors.contains(rightName)) {
+        left.detach();
+        replacement = IR.add(left, IR.string(getNativeDecl(rightName)));
+      }
+    }
+
+    if (replacement == null) {
+      return n;
+    }
+
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryUnfuckArrayEntries(Node n) {
@@ -262,7 +322,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    String decl = "function " + name + "() {\n    [native code]\n}";
+    String decl = getNativeDecl(name);
 
     // We have `X + [].func`.
     String result = isReversed ? decl + affix : affix + decl;
