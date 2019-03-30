@@ -30,6 +30,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
           "lastIndexOf", "map", "pop", "push", "reduce", "reduceRight", "reverse", "shift", "slice",
           "some", "sort", "splice", "toLocaleString", "toSource", "toString", "unshift", "values"));
 
+  private static final Set<String> evalArrayFunctions =
+      new HashSet<String>(Arrays.asList("fill", "filter", "sort"));
+
   private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
 
   PeepholeUnfuck() {}
@@ -84,7 +87,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
     Node filter = getProp.getLastChild();
-    if (!filter.isString() || filter.getString() != "filter") {
+    if (!filter.isString() || !evalArrayFunctions.contains(filter.getString())) {
       return n;
     }
 
@@ -98,7 +101,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    // We have `[].filter["constructor"]("XXX")()`.
+    // We have `[].filter["constructor"]("XX")()`.
     Node eval = IR.name("eval");
     eval.putBooleanProp(Node.DIRECT_EVAL, true);
     eval.useSourceInfoFrom(parent);
@@ -108,6 +111,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     evalArg.useSourceInfoFrom(subject);
 
     Node replacement = IR.call(eval, evalArg);
+    replacement.putBooleanProp(Node.FREE_CALL, true);
     parent.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;

@@ -308,6 +308,7 @@ abstract class IntegrationTestCase {
                   "",
                   "/** @constructor */",
                   "var HTMLElement = function() {};",
+                  "function eval() {}",
                   "")));
 
   protected List<SourceFile> externs = DEFAULT_EXTERNS;

@@ -155,7 +155,7 @@ public final class NodeSubject extends Subject<NodeSubject, Node> {
                 facts.add(
                     fact("Expected JSDoc", jsdocToStringNullsafe(misExpected.getJSDocInfo())));
               }
-
+              facts.add(fact("Mismatch reason", mismatch.reason));
               failWithoutActual(simpleFact("Node tree inequality"), facts.toArray(new Fact[0]));
             });
   }
@@ -287,9 +287,10 @@ public final class NodeSubject extends Subject<NodeSubject, Node> {
    */
   private static Optional<NodeMismatch> findFirstMismatch(
       Node actual, Node expected, boolean jsDoc) {
-    if (!actual.isEquivalentTo(
-        expected, /* compareType= */ false, /* recurse= */ false, jsDoc, /* sideEffect= */ false)) {
-      return Optional.of(new NodeMismatch(actual, expected));
+    String reason = actual.isEquivalentToWithReason(
+        expected, /* compareType= */ false, /* recurse= */ false, jsDoc, /* sideEffect= */ false);
+    if (reason!="") {
+      return Optional.of(new NodeMismatch(actual, expected, reason));
     }
 
     // `isEquivalentTo` confirms that the number of children is the same.
@@ -306,10 +307,18 @@ public final class NodeSubject extends Subject<NodeSubject, Node> {
   private static final class NodeMismatch {
     final Node actual;
     final Node expected;
+    final String reason;
 
-    NodeMismatch(Node actual, Node expected) {
+    NodeMismatch(Node actual, Node expected){
       this.actual = actual;
       this.expected = expected;
+      this.reason = "";
+    }
+    
+    NodeMismatch(Node actual, Node expected, String reason){
+      this.actual = actual;
+      this.expected = expected;
+      this.reason = reason;
     }
   }
 

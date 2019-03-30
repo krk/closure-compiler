@@ -7042,8 +7042,34 @@ public final class IntegrationTest extends IntegrationTestCase {
   }
 
   @Test
+  public void testPeepholeUnfuck_ArrayLiteralFunctionStringCoercion() {
+    CompilerOptions options = createCompilerOptions();
+    options.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT5);
+    options.addWarningsGuard(new DiagnosticGroupWarningsGuard(
+        DiagnosticGroups.CHECK_TYPES, CheckLevel.OFF));    
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    
+    testSame(options,"[].filter");
+    testSame(options,"+[].filter");
+
+    test(options, "1+[].filter", "\"1function filter() {\\n    [native code]\\n}\"");
+    test(options, "!1+[].filter", "\"falsefunction filter() {\\n [native code]\\n}\"");
+    test(options, "!0+[].concat", "\"truefunction concat() {\\n [native code]\\n}\"");
+    test(options, "\"abc\"+[].fill", "\"abcfunction fill() {\\n [native code]\\n}\"");
+    test(options, "1.256+[].filter", "\"1.256function filter() {\\n [native code]\\n}\"");
+    test(options, "[]+[].filter", "\"function filter() {\\n [native code]\\n}\"");
+
+    test(options, "[].filter+1", "\"function filter() {\\n [native code]\\n}1\"");
+    test(options, "[].filter+!1", "\"function filter() {\\n [native code]\\n}false\"");
+    test(options, "[].filter+!0", "\"function filter() {\\n [native code]\\n}true\"");
+    test(options, "[].filter+\"abc\"", "\"function filter() {\\n [native code]\\n}abc\"");
+    test(options, "[].filter+1.256", "\"function filter() {\\n [native code]\\n}1.256\"");
+    test(options, "[].filter+[]", "\"function filter() {\\n [native code]\\n}\"");
+  }
+  
+  @Test
   public void testPeepholeUnfuck_FilterConstructorInvocation() {
-    // TODO Fix the test.
     CompilerOptions options = createCompilerOptions();
     options.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
     options.setLanguageOut(LanguageMode.ECMASCRIPT5);
@@ -7055,5 +7081,10 @@ public final class IntegrationTest extends IntegrationTestCase {
         options,
         "[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]][([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]]([+!+[]]+[])()",
         "eval(\"1\")");
+    
+    test(
+        options,
+        "[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]][([]+[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]])[!![]+!![]+!![]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]])[+!![]+[+[]]]+([][[]]+[])[+!![]]+(![]+[])[!![]+!![]+!![]]+(!![]+[])[+[]]+(!![]+[])[+!![]]+([][[]]+[])[+[]]+([]+[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]])[!![]+!![]+!![]]+(!![]+[])[+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]])[+!![]+[+[]]]+(!![]+[])[+!![]]]((!![]+[])[+!![]]+(!![]+[])[!![]+!![]+!![]]+(!![]+[])[+[]]+([][[]]+[])[+[]]+(!![]+[])[+!![]]+([][[]]+[])[+!![]]+(![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!![]+[+[]]]+(![]+[])[!![]+!![]]+(![]+[])[!![]+!![]]])[!![]+!![]+[+[]]]+(![]+[])[+!![]]+(![]+[])[!![]+!![]]+(!![]+[])[!![]+!![]+!![]]+(!![]+[])[+!![]]+(!![]+[])[+[]])()(+[])",
+        "eval(\"return alert\")(0)");
   }
 }

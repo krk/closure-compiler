@@ -2012,6 +2012,97 @@ public class Node implements Serializable {
   }
 
   /**
+   * @param compareType Whether to compare the JSTypes of the nodes.
+   * @param recurse Whether to compare the children of the current node. If not, only the count
+   *     of the children are compared.
+   * @param jsDoc Whether to check that the JsDoc of the nodes are equivalent.
+   * @param sideEffect Whether to check that the side-effect flags of the nodes are equivalent.
+   * @return Whether this node is equivalent semantically to the provided node.
+   */
+  public String isEquivalentToWithReason(
+      Node node, boolean compareType, boolean recurse, boolean jsDoc, boolean sideEffect) {
+    if (token != node.token
+        || getChildCount() != node.getChildCount()
+        || this.getClass() != node.getClass()) {
+      return "1";
+    }
+
+    if (compareType && !JSType.isEquivalent(getJSType(), node.getJSType())) {
+      return "2";
+    }
+
+    if (jsDoc && !JSDocInfo.areEquivalent(getJSDocInfo(), node.getJSDocInfo())) {
+      return "3";
+    }
+
+    TypeDeclarationNode thisTDN = this.getDeclaredTypeExpression();
+    TypeDeclarationNode thatTDN = node.getDeclaredTypeExpression();
+    if ((thisTDN != null || thatTDN != null)
+        && (thisTDN == null
+            || thatTDN == null
+            || !thisTDN.isEquivalentTo(thatTDN, compareType, recurse, jsDoc))) {
+      return "4";
+    }
+
+    if (token == Token.INC || token == Token.DEC) {
+      int post1 = this.getIntProp(Prop.INCRDECR);
+      int post2 = node.getIntProp(Prop.INCRDECR);
+      if (post1 != post2) {
+        return "5";
+      }
+    } else if (token == Token.STRING || token == Token.STRING_KEY) {
+      if (token == Token.STRING_KEY) {
+        int quoted1 = this.getIntProp(Prop.QUOTED);
+        int quoted2 = node.getIntProp(Prop.QUOTED);
+        if (quoted1 != quoted2) {
+          return "6";
+        }
+      }
+
+      int slashV1 = this.getIntProp(Prop.SLASH_V);
+      int slashV2 = node.getIntProp(Prop.SLASH_V);
+      if (slashV1 != slashV2) {
+        return "7";
+      }
+    } else if (token == Token.CALL) {
+      if (this.getBooleanProp(Prop.FREE_CALL) != node.getBooleanProp(Prop.FREE_CALL)) {
+        return "8";
+      }
+    } else if (token == Token.FUNCTION) {
+      // Must be the same kind of function to be equivalent
+      if (this.isArrowFunction() != node.isArrowFunction()) {
+        return "9";
+      }
+      if (this.isGeneratorFunction() != node.isGeneratorFunction()) {
+        return "10";
+      }
+      if (this.isAsyncFunction() != node.isAsyncFunction()) {
+        return "10";
+      }
+    }
+
+    if (sideEffect) {
+      if (this.getSideEffectFlags() != node.getSideEffectFlags()) {
+        return "11";
+      }
+
+      if (this.isUnusedParameter() != node.isUnusedParameter()) {
+        return "12";
+      }
+    }
+
+    if (recurse) {
+      for (Node n = first, n2 = node.first;
+           n != null;
+           n = n.next, n2 = n2.next) {
+        return n.isEquivalentToWithReason(n2, compareType, recurse, jsDoc, sideEffect);
+      }
+    }
+
+    return "";
+  }
+  
+  /**
    * This function takes a set of GETPROP nodes and produces a string that is each property
    * separated by dots. If the node ultimately under the left sub-tree is not a simple name, this is
    * not a valid qualified name.
