@@ -54,7 +54,63 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryFilterConstructorInvocation(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Node tryFilterConstructorInvocation(Node n) {
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node parent = n.getParent();
+    if (!parent.isCall() || !parent.hasOneChild()) {
+      return n;
+    }
+
+    Node getElem = n.getFirstChild();
+    if (!getElem.isGetElem() || !getElem.hasTwoChildren()) {
+      return n;
+    }
+    Node getProp = getElem.getFirstChild();
+    if (!getProp.isGetProp() || !getProp.hasTwoChildren()) {
+      return n;
+    }
+    if (!getProp.getFirstChild().isArrayLit()) {
+      return n;
+    }
+    Node filter = getProp.getLastChild();
+    if (!filter.isString() || filter.getString() != "filter") {
+      return n;
+    }
+
+    Node ctor = getElem.getLastChild();
+    if (!ctor.isString() && ctor.getString() != "constructor") {
+      return n;
+    }
+
+    Node subject = n.getLastChild();
+    if (!subject.isString()) {
+      return n;
+    }
+
+    // We have `[].filter["constructor"]("XXX")()`.
+    Node eval = IR.name("eval");
+    eval.putBooleanProp(Node.DIRECT_EVAL, true);
+    eval.useSourceInfoFrom(parent);
+
+    String code = subject.getString();
+    Node evalArg = IR.string(code);
+    evalArg.useSourceInfoFrom(subject);
+
+    Node replacement = IR.call(eval, evalArg);
+    parent.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryArrayLiteralFunctionStringCoercion(Node n) {

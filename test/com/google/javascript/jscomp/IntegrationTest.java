@@ -7024,8 +7024,8 @@ public final class IntegrationTest extends IntegrationTestCase {
   @Test
   public void testPeepholeUnfuck() {
     CompilerOptions options = createCompilerOptions();
-    options.setLanguageIn(LanguageMode.STABLE);
-    options.setLanguageOut(LanguageMode.STABLE);
+    options.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT5);
     options.addWarningsGuard(new DiagnosticGroupWarningsGuard(
         DiagnosticGroups.CHECK_TYPES, CheckLevel.OFF));
     CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
@@ -7039,5 +7039,21 @@ public final class IntegrationTest extends IntegrationTestCase {
         options,
         "(!1+[][\"f\"+([!1]+[][[]])[\"10\"]+\"lter\"])[\"20\"]+[1]+(!0+[][\"f\"+([!1]+[][[]])[\"10\"]+\"lter\"])[\"20\"]",
         "\"(1)\"");
+  }
+
+  @Test
+  public void testPeepholeUnfuck_FilterConstructorInvocation() {
+    // TODO Fix the test.
+    CompilerOptions options = createCompilerOptions();
+    options.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
+    options.setLanguageOut(LanguageMode.ECMASCRIPT5);
+    options.addWarningsGuard(new DiagnosticGroupWarningsGuard(
+        DiagnosticGroups.CHECK_TYPES, CheckLevel.OFF));    
+    CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
+    
+    test(
+        options,
+        "[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]][([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[+!+[]+[+[]]]+([][[]]+[])[+!+[]]+(![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[+!+[]]+([][[]]+[])[+[]]+([][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[][(![]+[])[+[]]+([![]]+[][[]])[+!+[]+[+[]]]+(![]+[])[!+[]+!+[]]+(!![]+[])[+[]]+(!![]+[])[!+[]+!+[]+!+[]]+(!![]+[])[+!+[]]])[+!+[]+[+[]]]+(!![]+[])[+!+[]]]([+!+[]]+[])()",
+        "eval(\"1\")");
   }
 }
