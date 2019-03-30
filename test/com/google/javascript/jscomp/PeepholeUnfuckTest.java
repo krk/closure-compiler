@@ -79,7 +79,7 @@ public final class PeepholeUnfuckTest extends CompilerTestCase {
   }
 
   @Test
-  public void testPeepholeUnfuck_FilterConstructorInvocation() {
+  public void testPeepholeUnfuck_ArrayFunctionConstructorInvocation() {
     foldSame("[].filter[\"constructor\"]()");
     foldSame("[].filter[\"constructor\"](\"1\")");
     foldSame("[].filter[\"constructor\"](1)()");

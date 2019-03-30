@@ -7069,7 +7069,7 @@ public final class IntegrationTest extends IntegrationTestCase {
   }
   
   @Test
-  public void testPeepholeUnfuck_FilterConstructorInvocation() {
+  public void testPeepholeUnfuck_ArrayFunctionConstructorInvocation() {
     CompilerOptions options = createCompilerOptions();
     options.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
     options.setLanguageOut(LanguageMode.ECMASCRIPT5);

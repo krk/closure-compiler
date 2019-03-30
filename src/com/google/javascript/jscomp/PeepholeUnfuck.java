@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.Set;
 import com.google.javascript.rhino.IR;
 import com.google.javascript.rhino.Node;
+import com.google.javascript.rhino.Node.SideEffectFlags;
 
 class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
@@ -57,7 +58,12 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
-    node = tryFilterConstructorInvocation(n);
+    node = tryArrayFunctionConstructorInvocation(n);
+    if (node != n) {
+      return node;
+    }
+
+    node = tryFunctionConstructorInvocation(n);
     if (node != n) {
       return node;
     }
@@ -65,7 +71,57 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return n;
   }
 
-  private Node tryFilterConstructorInvocation(Node n) {
+  private Node tryFunctionConstructorInvocation(Node n) {
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node parent = n.getParent();
+    if (!parent.isCall() || !parent.hasOneChild()) {
+      return n;
+    }
+
+    Node name = n.getFirstChild();
+    if (!name.isName() || name.getString() != "Function") {
+      return n;
+    }
+    Node argNode = n.getLastChild();
+    if (!argNode.isString()) {
+      return n;
+    }
+    String arg = argNode.getString();
+    if (!arg.startsWith("return")) {
+      return n;
+    }
+    String code = arg.substring("return".length()).trim();
+
+    Node replacement;
+    if (code.startsWith("/") && code.endsWith("/") && code.length() >= 2) {
+      // Possibly regex.
+      String regex = code.substring(1, code.length() - 1);
+      Node regexArg = IR.string(regex);
+      regexArg.useSourceInfoFrom(argNode);
+
+      replacement = IR.regexp(regexArg);
+      replacement.useSourceInfoFrom(parent);
+    } else {
+      Node eval = IR.name("eval");
+      eval.putBooleanProp(Node.DIRECT_EVAL, true);
+      eval.useSourceInfoFrom(parent);
+
+      Node evalArg = IR.string(code);
+      evalArg.useSourceInfoFrom(argNode);
+
+      replacement = IR.call(eval, evalArg);
+      replacement.putBooleanProp(Node.FREE_CALL, true);
+    }
+
+    parent.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryArrayFunctionConstructorInvocation(Node n) {
     if (!n.isCall() || !n.hasTwoChildren()) {
       return n;
     }
