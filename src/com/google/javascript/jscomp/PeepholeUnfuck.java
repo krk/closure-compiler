@@ -15,6 +15,7 @@
 package com.google.javascript.jscomp;
 
 import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.text.DecimalFormat;
 import java.util.Arrays;
@@ -129,7 +130,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
-    node = tryEvaluateEscape(n);
+    node = tryEvaluateEscapes(n);
     if (node != n) {
       return node;
     }
@@ -149,7 +150,58 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateGetConstructor(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Node tryEvaluateGetConstructor(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+    Node left = n.getFirstChild();
+    Node right = n.getLastChild();
+    if (!left.isGetProp() && !right.isGetProp()) {
+      return n;
+    }
+
+    Node newLeft = null;
+    if (left.isGetProp() && left.hasTwoChildren()) {
+      Node empty = left.getFirstChild();
+      Node ctor = left.getLastChild();
+      if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
+        newLeft = IR.name("String");
+      }
+    }
+
+    Node newRight = null;
+    if (right.isGetProp() && right.hasTwoChildren()) {
+      Node empty = right.getFirstChild();
+      Node ctor = right.getLastChild();
+      if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
+        newRight = IR.name("String");
+      }
+    }
+
+    if (newLeft == null && newRight == null) {
+      return n;
+    }
+    if (newLeft == null) {
+      left.detach();
+      newLeft = left;
+    }
+    if (newRight == null) {
+      right.detach();
+      newRight = right;
+    }
+
+    Node replacement = IR.add(newLeft, newRight);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryEvaluateDate(Node n) {
@@ -285,15 +337,20 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return replacement;
   }
 
-  private Node tryEvaluateEscape(Node n) {
+  private Node tryEvaluateEscapes(Node n) {
     if (!n.isCall() || !n.hasTwoChildren()) {
       return n;
     }
 
     Node name = n.getFirstChild();
-    if (!name.isName() || name.getString() != "escape") {
+    if (!name.isName()) {
       return n;
     }
+    String nameStr = name.getString();
+    if (!(nameStr == "escape" || nameStr == "unescape")) {
+      return n;
+    }
+    Boolean isEscape = nameStr == "escape";
 
     String str;
     Node arg = n.getLastChild();
@@ -314,16 +371,19 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    String escaped;
+    String result;
     try {
-      // TODO Check if URLEncoder.encode is equivalent to
-      // https://tc39.github.io/ecma262/#sec-escape-string
-      escaped = URLEncoder.encode(str, "utf-8");
+      if (isEscape) { // TODO Check if URLEncoder.encode is equivalent to
+        // https://tc39.github.io/ecma262/#sec-escape-string
+        result = URLEncoder.encode(str, "utf-8");
+      } else {
+        result = URLDecoder.decode(str, "utf-8");
+      }
     } catch (UnsupportedEncodingException e) {
       return n;
     }
 
-    Node replacement = IR.string(escaped);
+    Node replacement = IR.string(result);
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -334,11 +394,11 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    Node getElem = n.getFirstChild();
-    if (!getElem.isGetElem() || !getElem.hasTwoChildren()) {
+    Node get = n.getFirstChild();
+    if (!isGetPropOrElem(get) || !get.hasTwoChildren()) {
       return n;
     }
-    Node num = getElem.getFirstChild();
+    Node num = get.getFirstChild();
     if (!num.isNumber()) {
       return n;
     }
@@ -350,23 +410,16 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     if (i != d) {
       return n;
     }
-    Node op = getElem.getLastChild();
+    Node op = get.getLastChild();
     if (!op.isString() || op.getString() != "toString") {
       return n;
     }
 
-    Node numBase = n.getLastChild();
-    if (!numBase.isNumber()) {
+    Optional<Integer> base = tryGetInteger(n.getLastChild());
+    if (!base.isPresent()) {
       return n;
     }
-    d = numBase.getDouble();
-    if (d < 0) {
-      return n;
-    }
-    int b = (int) d;
-    if (b != d) {
-      return n;
-    }
+    int b = base.get();
     if (b < 2 || b > 36) {
       return n;
     }
@@ -401,6 +454,13 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return replacement;
   }
 
+  private Node coerceNaNToString(Node n) {
+    if (n.isName() && n.getString() == "NaN") {
+      return IR.string("NaN");
+    }
+    return n;
+  }
+
   private Node tryConstructorCoercion(Node n) {
     if (!n.isAdd() || !n.hasTwoChildren()) {
       return n;
@@ -421,22 +481,22 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
         replacement = IR.string(getNativeDecl(leftName) + getNativeDecl(rightName));
       } else if (constructors.contains(leftName)) {
         right.detach();
-        replacement = IR.add(IR.string(getNativeDecl(leftName)), right);
+        replacement = IR.add(IR.string(getNativeDecl(leftName)), coerceNaNToString(right));
       } else if (constructors.contains(rightName)) {
         left.detach();
-        replacement = IR.add(left, IR.string(getNativeDecl(rightName)));
+        replacement = IR.add(coerceNaNToString(left), IR.string(getNativeDecl(rightName)));
       }
     } else if (left.isName()) {
       String leftName = left.getString();
       if (constructors.contains(leftName)) {
         right.detach();
-        replacement = IR.add(IR.string(getNativeDecl(leftName)), right);
+        replacement = IR.add(IR.string(getNativeDecl(leftName)), coerceNaNToString(right));
       }
     } else if (right.isName()) {
       String rightName = right.getString();
       if (constructors.contains(rightName)) {
         left.detach();
-        replacement = IR.add(left, IR.string(getNativeDecl(rightName)));
+        replacement = IR.add(coerceNaNToString(left), IR.string(getNativeDecl(rightName)));
       }
     }
 
@@ -507,29 +567,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
     String code = arg.substring("return".length()).trim();
 
-    Node replacement;
-    if (code.startsWith("/") && code.endsWith("/") && code.length() >= 2) {
-      // Possibly regex.
-      String regex = code.substring(1, code.length() - 1);
-      Node regexArg = IR.string(regex);
-      regexArg.useSourceInfoFrom(argNode);
-
-      replacement = IR.regexp(regexArg);
-      replacement.useSourceInfoFrom(parent);
-    } else if (TokenStream.isJSIdentifier(code)) {
-      replacement = IR.name(code);
-    } else {
-      Node eval = IR.name("eval");
-      eval.putBooleanProp(Node.DIRECT_EVAL, true);
-      eval.useSourceInfoFrom(parent);
-
-      Node evalArg = IR.string(code);
-      evalArg.useSourceInfoFrom(argNode);
-
-      replacement = IR.call(eval, evalArg);
-      replacement.putBooleanProp(Node.FREE_CALL, true);
-    }
-
+    Node replacement = tryEval(code, parent, argNode);
     parent.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -545,24 +583,24 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    Node getElem = n.getFirstChild();
-    if (!getElem.isGetElem() || !getElem.hasTwoChildren()) {
+    Node get1 = n.getFirstChild();
+    if (!isGetPropOrElem(get1) || !get1.hasTwoChildren()) {
       return n;
     }
-    Node getProp = getElem.getFirstChild();
-    if (!getProp.isGetProp() || !getProp.hasTwoChildren()) {
+    Node get2 = get1.getFirstChild();
+    if (!isGetPropOrElem(get2) || !get2.hasTwoChildren()) {
       return n;
     }
-    if (!getProp.getFirstChild().isArrayLit()) {
+    if (!get2.getFirstChild().isArrayLit()) {
       return n;
     }
-    Node filter = getProp.getLastChild();
+    Node filter = get2.getLastChild();
     if (!filter.isString() || !evalArrayFunctions.contains(filter.getString())) {
       return n;
     }
 
-    Node ctor = getElem.getLastChild();
-    if (!ctor.isString() && ctor.getString() != "constructor") {
+    Node ctor = get1.getLastChild();
+    if (!ctor.isString() || ctor.getString() != "constructor") {
       return n;
     }
 
@@ -571,17 +609,14 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
+    String arg = subject.getString();
+    if (!arg.startsWith("return")) {
+      return n;
+    }
+    String code = arg.substring("return".length()).trim();
+
     // We have `[].filter["constructor"]("XX")()`.
-    Node eval = IR.name("eval");
-    eval.putBooleanProp(Node.DIRECT_EVAL, true);
-    eval.useSourceInfoFrom(parent);
-
-    String code = subject.getString();
-    Node evalArg = IR.string(code);
-    evalArg.useSourceInfoFrom(subject);
-
-    Node replacement = IR.call(eval, evalArg);
-    replacement.putBooleanProp(Node.FREE_CALL, true);
+    Node replacement = tryEval(code, parent, subject);
     parent.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -618,6 +653,12 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       case ARRAYLIT:
         affix = "";
         break;
+      case NAME:
+        if (op.getString() == "NaN") {
+          affix = "NaN";
+          break;
+        }
+        return n;
       default:
         return n;
     }
@@ -712,6 +753,41 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return replacement;
   }
 
+  private Node tryEval(String code, Node codeSourceInfo, Node callSourceInfo) {
+    Node replacement;
+    if (code.startsWith("/") && code.endsWith("/") && code.length() >= 2) {
+      // Possibly regex.
+      String regex = code.substring(1, code.length() - 1);
+      Node regexArg = IR.string(regex);
+      regexArg.useSourceInfoFrom(codeSourceInfo);
+      return IR.regexp(regexArg);
+    } else if (code.startsWith("\"") && code.endsWith("\"") && code.length() >= 2) {
+      // Possibly string.
+      String string = code.substring(1, code.length() - 1);
+      return IR.string(string);
+    } else if (TokenStream.isJSIdentifier(code)) {
+      return IR.name(code);
+    }
+
+    try {
+      double n = Integer.parseInt(code);
+      return IR.number(n);
+    } catch (NumberFormatException e) {
+      // NOOP.
+    }
+
+    Node eval = IR.name("eval");
+    eval.putBooleanProp(Node.DIRECT_EVAL, true);
+    eval.useSourceInfoFrom(callSourceInfo);
+
+    Node evalArg = IR.string(code);
+    evalArg.useSourceInfoFrom(codeSourceInfo);
+
+    replacement = IR.call(eval, evalArg);
+    replacement.putBooleanProp(Node.FREE_CALL, true);
+    return replacement;
+  }
+
   private Optional<Integer> tryGetInteger(Node arg) {
     double d;
     if (arg.isNumber()) {
@@ -736,5 +812,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     return Optional.of(i);
+  }
+
+  private Boolean isGetPropOrElem(Node n) {
+    return n.isGetProp() || n.isGetElem();
   }
 }

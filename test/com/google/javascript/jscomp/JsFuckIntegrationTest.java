@@ -110,5 +110,9 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "(RegExp+\"\")[12]", "\"E\"");
     test(options, "(+[]+Function)[10]", "\"F\"");
     test(options, "(false+Function(\"return Date\")()())[30]", "\"G\"");
+    test(options,
+        "[].filter.constructor(\"return unesca\"+(211).toString(\"31\")[1]+\"e\")()([].filter.constructor(\"return esca\"+(211).toString(\"31\")[1]+\"e\")()(\"<\")[0]+\"48\")[0]",
+        "\"H\"");
+    test(options, "(Infinity+\"\")[0]", "\"I\"");
   }
 }
