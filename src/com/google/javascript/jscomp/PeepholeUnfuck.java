@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import com.google.javascript.rhino.IR;
 import com.google.javascript.rhino.Node;
@@ -135,7 +136,103 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateStringSlice(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
+  }
+
+  private Optional<Integer> tryGetInteger(Node arg) {
+    double d;
+    if (arg.isNumber()) {
+      d = arg.getDouble();
+    } else if (arg.isString()) {
+      String s = arg.getString();
+
+      try {
+        d = Double.parseDouble(s);
+      } catch (NullPointerException e) {
+        return Optional.empty();
+      } catch (NumberFormatException e) {
+        return Optional.empty();
+      }
+    } else {
+      return Optional.empty();
+    }
+
+    int i = (int) d;
+    if (i != d) {
+      return Optional.empty();
+    }
+
+    return Optional.of(i);
+  }
+
+  private Node tryEvaluateStringSlice(Node n) {
+    if (!n.isGetProp() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node parent = n.getParent();
+    if (parent == null || !parent.isCall()
+        || !(parent.hasTwoChildren() || parent.getChildCount() == 3)) {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!right.isString() || right.getString() != "slice") {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isString()) {
+      return n;
+    }
+    String subject = left.getString();
+
+    Node arg = parent.getSecondChild();
+    Optional<Integer> b = tryGetInteger(arg);
+    if (!b.isPresent()) {
+      return n;
+    }
+
+    int beginIndex = b.get();
+    int endIndex;
+
+    if (parent.hasTwoChildren()) {
+      endIndex = subject.length();
+    } else {
+      Node endArg = parent.getLastChild();
+      Optional<Integer> e = tryGetInteger(endArg);
+      if (!e.isPresent()) {
+        return n;
+      }
+      endIndex = e.get();
+    }
+
+    // https://tc39.github.io/ecma262/#sec-string.prototype.slice
+    int len = subject.length();
+    if (beginIndex < 0) {
+      beginIndex = Math.max(len + beginIndex, 0);
+    } else {
+      beginIndex = Math.min(beginIndex, len);
+    }
+
+    if (endIndex < 0) {
+      endIndex = Math.max(len + endIndex, 0);
+    } else {
+      endIndex = Math.min(endIndex, len);
+    }
+
+    int span = Math.max(endIndex - beginIndex, 0);
+    String result = subject.substring(beginIndex, beginIndex + span);
+
+    Node replacement = IR.string(result);
+    parent.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private String getNativeDecl(String name) {
@@ -148,7 +245,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node parent = n.getParent();
-    if (!parent.isCall() || !(parent.hasOneChild() || parent.hasTwoChildren())) {
+    if (parent == null || !parent.isCall() || !(parent.hasOneChild() || parent.hasTwoChildren())) {
       return n;
     }
 
@@ -195,12 +292,25 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
+    String str;
     Node arg = n.getLastChild();
-    if (!arg.isString()) {
+    if (arg.isString()) {
+      str = arg.getString();
+    } else if (arg.isGetProp() && arg.hasTwoChildren() && arg.getFirstChild().isArrayLit()) {
+      Node second = arg.getLastChild();
+      if (!second.isString()) {
+        return n;
+      }
+
+      String funcName = second.getString();
+      if (!PeepholeUnfuck.arrayFunctions.contains(funcName)) {
+        return n;
+      }
+      str = getNativeDecl(funcName);
+    } else {
       return n;
     }
 
-    String str = arg.getString();
     String escaped;
     try {
       // TODO Check if URLEncoder.encode is equivalent to
@@ -376,7 +486,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node parent = n.getParent();
-    if (!parent.isCall() || !parent.hasOneChild()) {
+    if (parent == null || !parent.isCall() || !parent.hasOneChild()) {
       return n;
     }
 
@@ -428,7 +538,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node parent = n.getParent();
-    if (!parent.isCall() || !parent.hasOneChild()) {
+    if (parent == null || !parent.isCall() || !parent.hasOneChild()) {
       return n;
     }
 
@@ -480,7 +590,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node add = n.getParent();
-    if (!add.isAdd()) {
+    if (add == null || !add.isAdd()) {
       return n;
     }
 

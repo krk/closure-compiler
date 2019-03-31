@@ -39,6 +39,8 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     options.setWarningLevel(DiagnosticGroups.FEATURES_NOT_SUPPORTED_BY_PASS, CheckLevel.OFF);
     options.addWarningsGuard(
         new DiagnosticGroupWarningsGuard(DiagnosticGroups.CHECK_TYPES, CheckLevel.OFF));
+    options.setWarningLevel(DiagnosticGroups.CHECK_REGEXP, CheckLevel.OFF);
+
     return options;
   }
 
@@ -73,7 +75,7 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     CompilerOptions options = createCompilerOptions();
     CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
 
-    // Appended [0] to k, v, w and z, otherwise result gets eliminated.
+    // Appended [0] to k, v, w, z, D otherwise result gets eliminated.
     test(options, "(false+\"\")[1]", "\"a\"");
     test(options, "([][\"entries\"]()+\"\")[2]", "\"b\"");
     test(options, "([][\"fill\"]+\"\")[3]", "\"c\"");
@@ -100,9 +102,12 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "(+(101))[\"to\"+String[\"name\"]](34)[1]", "\"x\"");
     test(options, "(NaN+[Infinity])[10]", "\"y\"");
     test(options, "(+(35))[\"to\"+String[\"name\"]](36)[0]", "\"z\"");
-    
+
     test(options, "(+[]+Array)[10]", "\"A\"");
     test(options, "(+[]+Boolean)[10]", "\"B\"");
     test(options, "Function(\"return escape\")()((\"\")[\"italics\"]())[2]", "\"C\"");
+    test(options, "Function(\"return escape\")()([][\"fill\"])[\"slice\"](\"-1\")[0]", "\"D\"");
+    test(options, "(RegExp+\"\")[12]", "\"E\"");
+    test(options, "(+[]+Function)[10]", "\"F\"");
   }
 }

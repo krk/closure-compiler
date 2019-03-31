@@ -314,6 +314,14 @@ abstract class IntegrationTestCase {
                   " * @return {string}",
                   " */",
                   "function escape(s) {}",
+                  "/**",
+                  " * @constructor",
+                  " * @param {*=} opt_pattern",
+                  " * @param {*=} opt_flags",
+                  " * @return {!RegExp}",
+                  " * @nosideeffects",
+                  " */",
+                  "function RegExp(opt_pattern, opt_flags) {}",
                   "")));
 
   protected List<SourceFile> externs = DEFAULT_EXTERNS;
