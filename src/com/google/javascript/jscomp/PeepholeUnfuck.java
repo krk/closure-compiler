@@ -81,11 +81,93 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryConstructorNameCoercion(n);
+    if (node != n) {
+      return node;
+    }
+
+    node = tryEvaluateIntToStringBase(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
   }
 
   private String getNativeDecl(String name) {
     return "function " + name + "() {\n    [native code]\n}";
+  }
+
+  private Node tryEvaluateIntToStringBase(Node n) {
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node getElem = n.getFirstChild();
+    if (!getElem.isGetElem() || !getElem.hasTwoChildren()) {
+      return n;
+    }
+    Node num = getElem.getFirstChild();
+    if (!num.isNumber()) {
+      return n;
+    }
+    double d = num.getDouble();
+    if (d < 0) {
+      return n;
+    }
+    int i = (int) d;
+    if (i != d) {
+      return n;
+    }
+    Node op = getElem.getLastChild();
+    if (!op.isString() || op.getString() != "toString") {
+      return n;
+    }
+
+    Node numBase = n.getLastChild();
+    if (!numBase.isNumber()) {
+      return n;
+    }
+    d = numBase.getDouble();
+    if (d < 0) {
+      return n;
+    }
+    int b = (int) d;
+    if (b != d) {
+      return n;
+    }
+    if (b < 2 || b > 36) {
+      return n;
+    }
+
+    String result = Integer.toString(i, b);
+    Node replacement = IR.string(result);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryConstructorNameCoercion(Node n) {
+    if (!n.isGetProp()) {
+      return n;
+    }
+    Node left = n.getFirstChild();
+    if (!left.isName()) {
+      return n;
+    }
+    String name = left.getString();
+    if (!constructors.contains(name)) {
+      return n;
+    }
+    Node right = n.getLastChild();
+    if (!right.isString() || right.getString() != "name") {
+      return n;
+    }
+
+    Node replacement = IR.string(name);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryConstructorCoercion(Node n) {

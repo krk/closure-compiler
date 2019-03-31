@@ -73,6 +73,7 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     CompilerOptions options = createCompilerOptions();
     CompilationLevel.ADVANCED_OPTIMIZATIONS.setOptionsForCompilationLevel(options);
 
+    // Appended [0] to k, v, w and z, otherwise result gets eliminated.
     test(options, "(false+\"\")[1]", "\"a\"");
     test(options, "([][\"entries\"]()+\"\")[2]", "\"b\"");
     test(options, "([][\"fill\"]+\"\")[3]", "\"c\"");
@@ -80,5 +81,24 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "(true+\"\")[3]", "\"e\"");
     test(options, "(false+\"\")[0]", "\"f\"");
     test(options, "(false+[0]+String)[20]", "\"g\"");
+    test(options, "(+(101))[\"to\"+String[\"name\"]](21)[1]", "\"h\"");
+    test(options, "([false]+undefined)[10]", "\"i\"");
+    test(options, "([][\"entries\"]()+\"\")[3]", "\"j\"");
+    test(options, "(+(20))[\"to\"+String[\"name\"]](21)[0]", "\"k\"");
+    test(options, "(false+\"\")[2]", "\"l\"");
+    test(options, "(Number+\"\")[11]", "\"m\"");
+    test(options, "(undefined+\"\")[1]", "\"n\"");
+    test(options, "(true+[][\"fill\"])[10]", "\"o\"");
+    test(options, "(+(211))[\"to\"+String[\"name\"]](31)[1]", "\"p\"");
+    test(options, "(+(212))[\"to\"+String[\"name\"]](31)[1]", "\"q\"");
+    test(options, "(true+\"\")[1]", "\"r\"");
+    test(options, "(false+\"\")[3]", "\"s\"");
+    test(options, "(true+\"\")[0]", "\"t\"");
+    test(options, "(undefined+\"\")[0]", "\"u\"");
+    test(options, "(+(31))[\"to\"+String[\"name\"]](32)[0]", "\"v\"");
+    test(options, "(+(32))[\"to\"+String[\"name\"]](33)[0]", "\"w\"");
+    test(options, "(+(101))[\"to\"+String[\"name\"]](34)[1]", "\"x\"");
+    test(options, "(NaN+[Infinity])[10]", "\"y\"");
+    test(options, "(+(35))[\"to\"+String[\"name\"]](36)[0]", "\"z\"");
   }
 }
