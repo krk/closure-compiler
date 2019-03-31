@@ -14,14 +14,13 @@
 
 package com.google.javascript.jscomp;
 
-import com.google.javascript.rhino.Token;
 import java.text.DecimalFormat;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import com.google.javascript.rhino.IR;
 import com.google.javascript.rhino.Node;
-import com.google.javascript.rhino.Node.SideEffectFlags;
+import com.google.javascript.rhino.TokenStream;
 
 class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
@@ -285,6 +284,8 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
       replacement = IR.regexp(regexArg);
       replacement.useSourceInfoFrom(parent);
+    } else if (TokenStream.isJSIdentifier(code)) {
+      replacement = IR.name(code);
     } else {
       Node eval = IR.name("eval");
       eval.putBooleanProp(Node.DIRECT_EVAL, true);
