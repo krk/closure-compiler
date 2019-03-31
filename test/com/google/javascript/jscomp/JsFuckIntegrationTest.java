@@ -109,5 +109,6 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "Function(\"return escape\")()([][\"fill\"])[\"slice\"](\"-1\")[0]", "\"D\"");
     test(options, "(RegExp+\"\")[12]", "\"E\"");
     test(options, "(+[]+Function)[10]", "\"F\"");
+    test(options, "(false+Function(\"return Date\")()())[30]", "\"G\"");
   }
 }

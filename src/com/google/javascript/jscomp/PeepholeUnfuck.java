@@ -39,6 +39,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
   }
 
+  // Only constant characters shall be referenced, e.g. "G".
+  private static final String dateNow =
+      "Mon Jan 01 2001 00:00:00 GMT+0100 (Central European Standard Time)";
   private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
 
   private static final Set<String> arrayFunctions = new HashSet<String>(
@@ -141,33 +144,33 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateDate(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
   }
 
-  private Optional<Integer> tryGetInteger(Node arg) {
-    double d;
-    if (arg.isNumber()) {
-      d = arg.getDouble();
-    } else if (arg.isString()) {
-      String s = arg.getString();
-
-      try {
-        d = Double.parseDouble(s);
-      } catch (NullPointerException e) {
-        return Optional.empty();
-      } catch (NumberFormatException e) {
-        return Optional.empty();
-      }
-    } else {
-      return Optional.empty();
+  private Node tryEvaluateDate(Node n) {
+    if (!n.isCall() || !n.hasOneChild()) {
+      return n;
     }
 
-    int i = (int) d;
-    if (i != d) {
-      return Optional.empty();
+    Node parent = n.getParent();
+    if (parent == null || !parent.isAdd()) {
+      return n;
     }
 
-    return Optional.of(i);
+    Node name = n.getFirstChild();
+    if (!name.isName() || name.getString() != "Date") {
+      return n;
+    }
+
+    Node replacement = IR.string(dateNow);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryEvaluateStringSlice(Node n) {
@@ -707,5 +710,31 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
+  }
+
+  private Optional<Integer> tryGetInteger(Node arg) {
+    double d;
+    if (arg.isNumber()) {
+      d = arg.getDouble();
+    } else if (arg.isString()) {
+      String s = arg.getString();
+
+      try {
+        d = Double.parseDouble(s);
+      } catch (NullPointerException e) {
+        return Optional.empty();
+      } catch (NumberFormatException e) {
+        return Optional.empty();
+      }
+    } else {
+      return Optional.empty();
+    }
+
+    int i = (int) d;
+    if (i != d) {
+      return Optional.empty();
+    }
+
+    return Optional.of(i);
   }
 }
