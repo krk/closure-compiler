@@ -84,6 +84,6 @@ public final class PeepholeUnfuckTest extends CompilerTestCase {
     foldSame("[].filter[\"constructor\"](\"1\")");
     foldSame("[].filter[\"constructor\"](1)()");
 
-    fold("[].filter[\"constructor\"](\"1\")()", "eval(\"1\")");
+    fold("var a=[].filter.constructor(\"return \\\"1\\\"\")()", "var a=\"1\"");
   }
 }
