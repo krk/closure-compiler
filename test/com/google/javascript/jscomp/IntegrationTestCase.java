@@ -310,6 +310,10 @@ abstract class IntegrationTestCase {
                   "var HTMLElement = function() {};",
                   "function eval() {}",
                   "/** @type {number} */ var NaN;",
+                  "/**",
+                  " * @return {string}",
+                  " */",
+                  "function escape(s) {}",
                   "")));
 
   protected List<SourceFile> externs = DEFAULT_EXTERNS;

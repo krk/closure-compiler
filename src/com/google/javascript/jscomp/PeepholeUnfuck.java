@@ -14,15 +14,31 @@
 
 package com.google.javascript.jscomp;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.text.DecimalFormat;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import com.google.javascript.rhino.IR;
 import com.google.javascript.rhino.Node;
 import com.google.javascript.rhino.TokenStream;
 
 class PeepholeUnfuck extends AbstractPeepholeOptimization {
+
+  private static class Tuple<X, Y> {
+    public final X x;
+    public final Y y;
+
+    public Tuple(X x, Y y) {
+      this.x = x;
+      this.y = y;
+    }
+  }
+
+  private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
 
   private static final Set<String> arrayFunctions = new HashSet<String>(
       Arrays.asList("concat", "copyWithin", "entries", "every", "fill", "filter", "find",
@@ -36,7 +52,26 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
   private static final Set<String> constructors = new HashSet<String>(
       Arrays.asList("Array", "Number", "String", "Boolean", "Function", "RegExp"));
 
-  private static final DecimalFormat doubleIntFormat = new DecimalFormat("#.##############");
+
+  // Only applies to empty strings, as in `"".blink()`.
+  private static final Map<String, Tuple<String, String>> stringToHtml =
+      new HashMap<String, Tuple<String, String>>() {
+        {
+          put("anchor", new Tuple<String, String>("<a name=\"", "\"></a>"));
+          put("big", new Tuple<String, String>("<big>", "</big>"));
+          put("blink", new Tuple<String, String>("<blink>", "</blink>"));
+          put("bold", new Tuple<String, String>("<b>", "</b>"));
+          put("fixed", new Tuple<String, String>("<tt>", "</tt>"));
+          put("fontcolor", new Tuple<String, String>("<font color=\"", "\"></font>"));
+          put("fontsize", new Tuple<String, String>("<font size=\"", "\"></font>"));
+          put("italics", new Tuple<String, String>("<i>", "</i>"));
+          put("link", new Tuple<String, String>("<a href=\"", "\"></a>"));
+          put("small", new Tuple<String, String>("<small>", "</small>"));
+          put("strike", new Tuple<String, String>("<strike>", "</strike>"));
+          put("sub", new Tuple<String, String>("<sub>", "</sub>"));
+          put("sup", new Tuple<String, String>("<sup>", "</sup>"));
+        }
+      };
 
   PeepholeUnfuck() {}
 
@@ -90,11 +125,95 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateEscape(n);
+    if (node != n) {
+      return node;
+    }
+
+    node = tryEvaluateStringToHtmlElement(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
   }
 
   private String getNativeDecl(String name) {
     return "function " + name + "() {\n    [native code]\n}";
+  }
+
+  private Node tryEvaluateStringToHtmlElement(Node n) {
+    if (!n.isGetProp() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node parent = n.getParent();
+    if (!parent.isCall() || !(parent.hasOneChild() || parent.hasTwoChildren())) {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isString() || left.getString() != "") {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!right.isString()) {
+      return n;
+    }
+
+    Tuple<String, String> affixes = stringToHtml.get(right.getString());
+    if (affixes == null) {
+      return n;
+    }
+
+    String subject;
+    if (parent.hasOneChild()) {
+      subject = "";
+    } else {
+      Node arg = parent.getLastChild();
+      if (!arg.isString()) {
+        return n;
+      }
+
+      subject = arg.getString();
+    }
+
+    Node replacement = IR.string(affixes.x + subject + affixes.y);
+    parent.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryEvaluateEscape(Node n) {
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node name = n.getFirstChild();
+    if (!name.isName() || name.getString() != "escape") {
+      return n;
+    }
+
+    Node arg = n.getLastChild();
+    if (!arg.isString()) {
+      return n;
+    }
+
+    String str = arg.getString();
+    String escaped;
+    try {
+      // TODO Check if URLEncoder.encode is equivalent to
+      // https://tc39.github.io/ecma262/#sec-escape-string
+      escaped = URLEncoder.encode(str, "utf-8");
+    } catch (UnsupportedEncodingException e) {
+      return n;
+    }
+
+    Node replacement = IR.string(escaped);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryEvaluateIntToStringBase(Node n) {

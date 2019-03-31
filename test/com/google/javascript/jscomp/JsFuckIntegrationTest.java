@@ -100,5 +100,9 @@ public final class JsFuckIntegrationTest extends IntegrationTestCase {
     test(options, "(+(101))[\"to\"+String[\"name\"]](34)[1]", "\"x\"");
     test(options, "(NaN+[Infinity])[10]", "\"y\"");
     test(options, "(+(35))[\"to\"+String[\"name\"]](36)[0]", "\"z\"");
+    
+    test(options, "(+[]+Array)[10]", "\"A\"");
+    test(options, "(+[]+Boolean)[10]", "\"B\"");
+    test(options, "Function(\"return escape\")()((\"\")[\"italics\"]())[2]", "\"C\"");
   }
 }
