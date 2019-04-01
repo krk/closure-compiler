@@ -174,11 +174,23 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryCoerceNaNObjectLitCall(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
   }
 
   private Node tryEvaluateEval(Node n) {
     if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    // Eval only if parent is add, getelem or getprop, not to break
+    // CommandLineRunnerTest.testIssue81.
+    Node parent = n.getParent();
+    if (parent == null || !(parent.isAdd() || isGetPropOrElem(parent))) {
       return n;
     }
 
@@ -545,6 +557,56 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return IR.string("NaN");
     }
     return n;
+  }
+
+  private Node tryCoerceNaNObjectLitCall(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    String prefix;
+    Node prefixNode = n.getFirstChild();
+    if (prefixNode.isName() && prefixNode.getString() == "NaN") {
+      prefix = "NaN";
+    } else if (prefixNode.isString()) {
+      prefix = prefixNode.getString();
+    } else {
+      return n;
+    }
+
+    Node call = n.getLastChild();
+    if (!call.isCall() || !call.hasOneChild()) {
+      return n;
+    }
+
+    Node getProp1 = call.getFirstChild();
+    if (!isGetPropOrElem(getProp1) || !getProp1.hasTwoChildren()) {
+      return n;
+    }
+
+    Node getProp2 = getProp1.getFirstChild();
+    if (!isGetPropOrElem(getProp2) || !getProp2.hasTwoChildren()) {
+      return n;
+    }
+
+    Node objectLit = getProp2.getFirstChild();
+    if (!objectLit.isObjectLit() || objectLit.hasChildren()) {
+      return n;
+    }
+    Node toString = getProp2.getLastChild();
+    if (!toString.isString() || toString.getString() != "toString") {
+      return n;
+    }
+
+    Node callStr = getProp1.getLastChild();
+    if (!callStr.isString() || callStr.getString() != "call") {
+      return n;
+    }
+
+    Node replacement = IR.string(prefix + "[object Undefined]");
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryCoerceNaNObjectLit(Node n) {
