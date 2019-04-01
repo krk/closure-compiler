@@ -164,7 +164,38 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateEval(n);
+    if (node != n) {
+      return node;
+    }
+
+
     return n;
+  }
+
+  private Node tryEvaluateEval(Node n) {
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node name = n.getFirstChild();
+    if (!name.isName() || name.getString() != "eval") {
+      return n;
+    }
+
+    Node str = n.getLastChild();
+    if (!str.isString()) {
+      return n;
+    }
+
+    Node replacement = tryEval(str.getString(), str, n);
+    if (replacement == n) {
+      return n;
+    }
+
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryEvaluateGetConstructor(Node n) {
@@ -804,7 +835,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
   private Node tryEval(String code, Node codeSourceInfo, Node callSourceInfo) {
     Node replacement;
-    if (code.startsWith("/") && code.endsWith("/") && code.length() >= 2) {
+    if (code == "{}") {
+      return IR.objectlit();
+    } else if (code.startsWith("/") && code.endsWith("/") && code.length() >= 2) {
       // Possibly regex.
       String regex = code.substring(1, code.length() - 1);
       Node regexArg = IR.string(regex);
