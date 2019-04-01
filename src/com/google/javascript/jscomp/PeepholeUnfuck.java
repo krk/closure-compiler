@@ -18,7 +18,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -40,6 +42,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
   }
 
+  private static final SimpleDateFormat jsDateFormat =
+      new SimpleDateFormat("EEE MMM dd yyyy '00:00:00' 'GMT'Z '('z')'");
+
   // Only constant characters shall be referenced, e.g. "G".
   private static final String dateNow =
       "Mon Jan 01 2001 00:00:00 GMT+0100 (Central European Standard Time)";
@@ -56,7 +61,6 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
   private static final Set<String> constructors = new HashSet<String>(
       Arrays.asList("Array", "Number", "String", "Boolean", "Function", "RegExp"));
-
 
   // Only applies to empty strings, as in `"".blink()`.
   private static final Map<String, Tuple<String, String>> stringToHtml =
@@ -150,6 +154,11 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateNewDate(n);
+    if (node != n) {
+      return node;
+    }
+
     node = tryEvaluateGetConstructor(n);
     if (node != n) {
       return node;
@@ -164,12 +173,12 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
     Node left = n.getFirstChild();
     Node right = n.getLastChild();
-    if (!left.isGetProp() && !right.isGetProp()) {
+    if (!isGetPropOrElem(left) && !isGetPropOrElem(right)) {
       return n;
     }
 
     Node newLeft = null;
-    if (left.isGetProp() && left.hasTwoChildren()) {
+    if (isGetPropOrElem(left) && left.hasTwoChildren()) {
       Node empty = left.getFirstChild();
       Node ctor = left.getLastChild();
       if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
@@ -178,7 +187,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node newRight = null;
-    if (right.isGetProp() && right.hasTwoChildren()) {
+    if (isGetPropOrElem(right) && right.hasTwoChildren()) {
       Node empty = right.getFirstChild();
       Node ctor = right.getLastChild();
       if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
@@ -197,7 +206,6 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       right.detach();
       newRight = right;
     }
-
     Node replacement = IR.add(newLeft, newRight);
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
@@ -220,6 +228,47 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node replacement = IR.string(dateNow);
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryEvaluateNewDate(Node n) {
+    if (!n.isAdd()) {
+      return n;
+    }
+
+    Node str = n.getLastChild();
+    String suffix;
+    if (str.isString()) {
+      suffix = str.getString();
+    } else if (str.isArrayLit()) {
+      suffix = "";
+    } else {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isNew() || !left.hasTwoChildren()) {
+      return n;
+    }
+
+    Node date = left.getFirstChild();
+    if (!date.isName() || date.getString() != "Date") {
+      return n;
+    }
+
+    Optional<Integer> opt = tryGetInteger(left.getLastChild());
+    if (!opt.isPresent()) {
+      return n;
+    }
+
+    int num = opt.get();
+
+    Date d = new Date(num);
+    String strDate = jsDateFormat.format(d);
+
+    Node replacement = IR.string(strDate + suffix);
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -295,7 +344,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
   }
 
   private Node tryEvaluateStringToHtmlElement(Node n) {
-    if (!n.isGetProp() || !n.hasTwoChildren()) {
+    if (!isGetPropOrElem(n) || !n.hasTwoChildren()) {
       return n;
     }
 
@@ -767,6 +816,25 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return IR.string(string);
     } else if (TokenStream.isJSIdentifier(code)) {
       return IR.name(code);
+    }
+
+    if (code.startsWith("new Date(") && code.endsWith(")")) {
+      String value = code.substring("new Date(".length(), code.length() - 1);
+      Node arg = null;
+      try {
+        double n = Integer.parseInt(value);
+        arg = IR.number(n);
+      } catch (NumberFormatException e) {
+        // NOOP.
+      }
+
+      if (value.startsWith("\"") && value.endsWith("\"") && value.length() > 2) {
+        arg = IR.string(value.substring(1, value.length() - 1));
+      }
+
+      if (arg != null) {
+        return IR.newNode(IR.name("Date"), arg);
+      }
     }
 
     try {
