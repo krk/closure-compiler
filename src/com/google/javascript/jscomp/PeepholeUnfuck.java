@@ -169,6 +169,10 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryCoerceNaNObjectLit(n);
+    if (node != n) {
+      return node;
+    }
 
     return n;
   }
@@ -541,6 +545,26 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return IR.string("NaN");
     }
     return n;
+  }
+
+  private Node tryCoerceNaNObjectLit(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+    Node left = n.getFirstChild();
+    if (!left.isName() || left.getString() != "NaN") {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!right.isObjectLit() || right.hasChildren()) {
+      return n;
+    }
+
+    Node replacement = IR.string("NaN[object Object]");
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
   }
 
   private Node tryConstructorCoercion(Node n) {
