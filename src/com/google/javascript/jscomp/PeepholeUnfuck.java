@@ -266,6 +266,30 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return replacement;
   }
 
+  private Node getObjectConstructor(Node n) {
+    Node newLeft = null;
+    if (!isGetPropOrElem(n) || !n.hasTwoChildren()) {
+      return null;
+    }
+
+    Node ctor = n.getLastChild();
+    if (ctor.isString() && ctor.getString() == "constructor") {
+      Node obj = n.getFirstChild();
+      switch (obj.getToken()) {
+        case STRING:
+          newLeft = IR.name("String");
+          break;
+        case NUMBER:
+          newLeft = IR.name("Number");
+          break;
+        default:
+          break;
+      }
+    }
+
+    return newLeft;
+  }
+
   private Node tryEvaluateGetConstructor(Node n) {
     if (!n.isAdd() || !n.hasTwoChildren()) {
       return n;
@@ -276,23 +300,8 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    Node newLeft = null;
-    if (isGetPropOrElem(left) && left.hasTwoChildren()) {
-      Node empty = left.getFirstChild();
-      Node ctor = left.getLastChild();
-      if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
-        newLeft = IR.name("String");
-      }
-    }
-
-    Node newRight = null;
-    if (isGetPropOrElem(right) && right.hasTwoChildren()) {
-      Node empty = right.getFirstChild();
-      Node ctor = right.getLastChild();
-      if (empty.isString() && ctor.isString() && ctor.getString() == "constructor") {
-        newRight = IR.name("String");
-      }
-    }
+    Node newLeft = getObjectConstructor(left);
+    Node newRight = getObjectConstructor(right);
 
     if (newLeft == null && newRight == null) {
       return n;
