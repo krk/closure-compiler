@@ -32,13 +32,24 @@ import com.google.javascript.rhino.TokenStream;
 
 class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
-  private static class Tuple<X, Y> {
+  private static class Pair<X, Y> {
     public final X x;
     public final Y y;
 
-    public Tuple(X x, Y y) {
+    public Pair(X x, Y y) {
       this.x = x;
       this.y = y;
+    }
+  }
+  private static class Tuple3<X, Y, Z> {
+    public final X x;
+    public final Y y;
+    public final Z z;
+
+    public Tuple3(X x, Y y, Z z) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
     }
   }
 
@@ -63,22 +74,28 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       Arrays.asList("Array", "Number", "String", "Boolean", "Function", "RegExp"));
 
   // Only applies to empty strings, as in `"".blink()`.
-  private static final Map<String, Tuple<String, String>> stringToHtml =
-      new HashMap<String, Tuple<String, String>>() {
+  private static final Map<String, Pair<String, String>> stringToHtml =
+      new HashMap<String, Pair<String, String>>() {
         {
-          put("anchor", new Tuple<String, String>("<a name=\"", "\"></a>"));
-          put("big", new Tuple<String, String>("<big>", "</big>"));
-          put("blink", new Tuple<String, String>("<blink>", "</blink>"));
-          put("bold", new Tuple<String, String>("<b>", "</b>"));
-          put("fixed", new Tuple<String, String>("<tt>", "</tt>"));
-          put("fontcolor", new Tuple<String, String>("<font color=\"", "\"></font>"));
-          put("fontsize", new Tuple<String, String>("<font size=\"", "\"></font>"));
-          put("italics", new Tuple<String, String>("<i>", "</i>"));
-          put("link", new Tuple<String, String>("<a href=\"", "\"></a>"));
-          put("small", new Tuple<String, String>("<small>", "</small>"));
-          put("strike", new Tuple<String, String>("<strike>", "</strike>"));
-          put("sub", new Tuple<String, String>("<sub>", "</sub>"));
-          put("sup", new Tuple<String, String>("<sup>", "</sup>"));
+          put("big", new Pair<String, String>("<big>", "</big>"));
+          put("blink", new Pair<String, String>("<blink>", "</blink>"));
+          put("bold", new Pair<String, String>("<b>", "</b>"));
+          put("fixed", new Pair<String, String>("<tt>", "</tt>"));
+          put("italics", new Pair<String, String>("<i>", "</i>"));
+          put("small", new Pair<String, String>("<small>", "</small>"));
+          put("strike", new Pair<String, String>("<strike>", "</strike>"));
+          put("sub", new Pair<String, String>("<sub>", "</sub>"));
+          put("sup", new Pair<String, String>("<sup>", "</sup>"));
+        }
+      };
+
+  private static final Map<String, Tuple3<String, String, String>> stringToHtmlWithParam =
+      new HashMap<String, Tuple3<String, String, String>>() {
+        {
+          put("anchor", new Tuple3<String, String, String>("<a name=\"", "\">", "</a>"));
+          put("fontcolor", new Tuple3<String, String, String>("<font color=\"", "\">", "</font>"));
+          put("fontsize", new Tuple3<String, String, String>("<font size=\"", "\">", "</font>"));
+          put("link", new Tuple3<String, String, String>("<a href=\"", "\">", "</a>"));
         }
       };
 
@@ -179,6 +196,16 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return node;
     }
 
+    node = tryEvaluateArraySliceOfString(n);
+    if (node != n) {
+      return node;
+    }
+
+    node = tryCoerceRegExpObject(n);
+    if (node != n) {
+      return node;
+    }
+
     return n;
   }
 
@@ -209,6 +236,31 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryCoerceRegExpObject(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node left = n.getFirstChild();
+    if (!left.isCall() || !left.hasOneChild()) {
+      return n;
+    }
+    Node re = left.getFirstChild();
+    if (!re.isName() || re.hasChildren() || re.getString() != "RegExp") {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!right.isString() || right.getString() != "") {
+      return n;
+    }
+
+    Node replacement = IR.string("/(?:)/");
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -289,7 +341,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     String suffix;
     if (str.isString()) {
       suffix = str.getString();
-    } else if (str.isArrayLit()) {
+    } else if (str.isArrayLit() && !str.hasChildren()) {
       suffix = "";
     } else {
       return n;
@@ -317,6 +369,50 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
     Node replacement = IR.string(strDate + suffix);
     n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryEvaluateArraySliceOfString(Node n) {
+    // [].slice.call("false") -> [ "f", "a", "l", "s", "e" ]
+    if (!isGetPropOrElem(n) || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node parent = n.getParent();
+    if (parent == null || !parent.isCall() || !parent.hasTwoChildren()) {
+      return n;
+    }
+
+    Node arg = parent.getLastChild();
+    if (!arg.isString()) {
+      return n;
+    }
+
+    Node getProp = n.getFirstChild();
+    if (!isGetPropOrElem(getProp) || !getProp.hasTwoChildren()) {
+      return n;
+    }
+    Node left = getProp.getFirstChild();
+    if (!left.isArrayLit() || left.hasChildren()) {
+      return n;
+    }
+    Node right = getProp.getLastChild();
+    if (!right.isString() || right.getString() != "slice") {
+      return n;
+    }
+
+    Node call = n.getLastChild();
+    if (!call.isString() || call.getString() != "call") {
+      return n;
+    }
+
+    Node replacement = IR.arraylit();
+    for (char c : arg.getString().toCharArray()) {
+      replacement.addChildToFront(IR.string(Character.toString(c)));
+    }
+
+    parent.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
   }
@@ -401,7 +497,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node left = n.getFirstChild();
-    if (!left.isString() || left.getString() != "") {
+    if (!left.isString()) {
       return n;
     }
 
@@ -410,24 +506,35 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    Tuple<String, String> affixes = stringToHtml.get(right.getString());
+    Tuple3<String, String, String> affixes3 = null;
+    Pair<String, String> affixes = stringToHtml.get(right.getString());
     if (affixes == null) {
-      return n;
+      affixes3 = stringToHtmlWithParam.get(right.getString());
+      if (affixes3 == null) {
+        return n;
+      }
     }
 
-    String subject;
+    String str = left.getString();
+
+    String param;
     if (parent.hasOneChild()) {
-      subject = "";
+      param = "";
     } else {
       Node arg = parent.getLastChild();
       if (!arg.isString()) {
         return n;
       }
 
-      subject = arg.getString();
+      param = arg.getString();
     }
 
-    Node replacement = IR.string(affixes.x + subject + affixes.y);
+    Node replacement;
+    if (affixes != null) {
+      replacement = IR.string(affixes.x + str + affixes.y);
+    } else {
+      replacement = IR.string(affixes3.x + param + affixes3.y + str + affixes3.z);
+    }
     parent.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -452,7 +559,8 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     Node arg = n.getLastChild();
     if (arg.isString()) {
       str = arg.getString();
-    } else if (arg.isGetProp() && arg.hasTwoChildren() && arg.getFirstChild().isArrayLit()) {
+    } else if (arg.isGetProp() && arg.hasTwoChildren() && arg.getFirstChild().isArrayLit()
+        && !arg.getFirstChild().hasChildren()) {
       Node second = arg.getLastChild();
       if (!second.isString()) {
         return n;
@@ -694,7 +802,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     if (!getProp.isGetProp() || !getProp.hasTwoChildren()) {
       return n;
     }
-    if (!getProp.getFirstChild().isArrayLit()) {
+    if (!getProp.getFirstChild().isArrayLit() || getProp.getFirstChild().hasChildren()) {
       return n;
     }
     Node entries = getProp.getLastChild();
@@ -820,12 +928,20 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
         affix = "";
         break;
       case NAME:
-        if (op.getString() == "NaN") {
+        String name = op.getString();
+        if (name == "NaN") {
           affix = "NaN";
+          break;
+        } else if (name == "undefined") {
+          affix = "undefined";
           break;
         }
         return n;
       default:
+        if (NodeUtil.isUndefined(op)) {
+          affix = "undefined";
+          break;
+        }
         return n;
     }
 
@@ -843,7 +959,6 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     if (!PeepholeUnfuck.arrayFunctions.contains(name)) {
       return n;
     }
-
     String decl = getNativeDecl(name);
 
     // We have `X + [].func`.
@@ -905,7 +1020,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     Node right = n.getLastChild();
-    if (!right.isArrayLit()) {
+    if (!right.isArrayLit() || right.hasChildren()) {
       return n;
     }
     if (right.hasChildren()) {
