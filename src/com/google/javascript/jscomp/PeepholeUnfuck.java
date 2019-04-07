@@ -101,6 +101,15 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
   PeepholeUnfuck() {}
 
+  private static final Boolean logUnfuckers = false;
+
+  private void printIf(Boolean condition, String log) {
+    if (!condition) {
+      return;
+    }
+    System.out.println(log);
+  }
+
   /**
    * Tries to apply our various peephole unfuckifications on the passed in node.
    */
@@ -108,96 +117,115 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
   public Node optimizeSubtree(Node n) {
     Node node = tryUndefined(n);
     if (node != n) {
+      printIf(logUnfuckers, "1");
       return node;
     }
 
     node = tryStringIndexedString(n);
     if (node != n) {
+      printIf(logUnfuckers, "2");
       return node;
     }
 
     node = tryArrayLiteralFunctionStringCoercion(n);
     if (node != n) {
+      printIf(logUnfuckers, "3");
       return node;
     }
 
     node = tryArrayFunctionConstructorInvocation(n);
     if (node != n) {
+      printIf(logUnfuckers, "4");
       return node;
     }
 
     node = tryFunctionConstructorInvocation(n);
     if (node != n) {
+      printIf(logUnfuckers, "5");
       return node;
     }
 
     node = tryUnfuckArrayEntries(n);
     if (node != n) {
+      printIf(logUnfuckers, "6");
       return node;
     }
 
     node = tryConstructorCoercion(n);
     if (node != n) {
+      printIf(logUnfuckers, "7");
       return node;
     }
 
     node = tryConstructorNameCoercion(n);
     if (node != n) {
+      printIf(logUnfuckers, "8");
       return node;
     }
 
     node = tryEvaluateIntToStringBase(n);
     if (node != n) {
+      printIf(logUnfuckers, "8");
       return node;
     }
 
     node = tryEvaluateEscapes(n);
     if (node != n) {
+      printIf(logUnfuckers, "9");
       return node;
     }
 
     node = tryEvaluateStringToHtmlElement(n);
     if (node != n) {
+      printIf(logUnfuckers, "10");
       return node;
     }
 
     node = tryEvaluateStringSlice(n);
     if (node != n) {
+      printIf(logUnfuckers, "11");
       return node;
     }
 
     node = tryEvaluateDate(n);
     if (node != n) {
+      printIf(logUnfuckers, "12");
       return node;
     }
 
     node = tryEvaluateNewDate(n);
     if (node != n) {
+      printIf(logUnfuckers, "13");
       return node;
     }
 
     node = tryEvaluateGetConstructor(n);
     if (node != n) {
+      printIf(logUnfuckers, "14");
       return node;
     }
 
     node = tryEvaluateEval(n);
     if (node != n) {
+      printIf(logUnfuckers, "15");
       return node;
     }
 
     node = tryCoerceNaNObjectLit(n);
     if (node != n) {
+      printIf(logUnfuckers, "16");
       return node;
     }
 
     node = tryCoerceNaNObjectLitCall(n);
     if (node != n) {
+      printIf(logUnfuckers, "17");
       return node;
     }
 
     node = tryEvaluateArraySliceOfString(n);
     if (node != n) {
+      printIf(logUnfuckers, "18");
       return node;
     }
 
