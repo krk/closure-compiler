@@ -231,6 +231,19 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
 
     node = tryCoerceRegExpObject(n);
     if (node != n) {
+      printIf(logUnfuckers, "19");
+      return node;
+    }
+
+    node = tryCoerceWindowObject(n);
+    if (node != n) {
+      printIf(logUnfuckers, "20");
+      return node;
+    }
+
+    node = tryEvaluateFromCharCode(n);
+    if (node != n) {
+      printIf(logUnfuckers, "21");
       return node;
     }
 
@@ -264,6 +277,73 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryEvaluateFromCharCode(Node n) {
+    // ""["constructor"]["fromCharCode"]("0")
+    if (!n.isCall() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    Node getProp1 = n.getFirstChild();
+    if (!isGetPropOrElem(getProp1) || !getProp1.hasTwoChildren()) {
+      return n;
+    }
+    Node getProp2 = getProp1.getFirstChild();
+    if (!isGetPropOrElem(getProp2) || !getProp2.hasTwoChildren()) {
+      return n;
+    }
+    Node left = getProp2.getFirstChild();
+    if (!left.isString()) {
+      return n;
+    }
+    Node right = getProp2.getLastChild();
+    if (!right.isString() || right.getString() != "constructor") {
+      return n;
+    }
+
+    Node funcName = getProp1.getLastChild();
+    if (!funcName.isString() || funcName.getString() != "fromCharCode") {
+      return n;
+    }
+
+    Optional<Integer> code = tryGetInteger(n.getLastChild());
+    if (!code.isPresent()) {
+      return n;
+    }
+
+    int c = code.get();
+    if (c < 0 || c > 65535) {
+      return n;
+    }
+
+    Node replacement = IR.string(Character.toString((char) c));
+    n.replaceWith(replacement);
+    reportChangeToEnclosingScope(replacement);
+    return replacement;
+  }
+
+  private Node tryCoerceWindowObject(Node n) {
+    if (!n.isAdd() || !n.hasTwoChildren()) {
+      return n;
+    }
+
+    String js = new CodePrinter.Builder(n).build();
+    Node left = n.getFirstChild();
+    if (!left.isName() || left.hasChildren() || left.getString() != "this") {
+      return n;
+    }
+
+    Node right = n.getLastChild();
+    if (!((right.isString() && right.getString() == "")
+        || (right.isArrayLit() && !right.hasChildren()))) {
+      return n;
+    }
+
+    Node replacement = IR.string("[object Window]");
     n.replaceWith(replacement);
     reportChangeToEnclosingScope(replacement);
     return replacement;
@@ -309,6 +389,9 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
           break;
         case NUMBER:
           newLeft = IR.name("Number");
+          break;
+        case REGEXP:
+          newLeft = IR.name("RegExp");
           break;
         default:
           break;
@@ -394,12 +477,12 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return n;
     }
 
-    Optional<Integer> opt = tryGetInteger(left.getLastChild());
+    Optional<Double> opt = tryGetNumber(left.getLastChild());
     if (!opt.isPresent()) {
       return n;
     }
 
-    int num = opt.get();
+    long num = opt.get().longValue();
 
     Date d = new Date(num);
     String strDate = jsDateFormat.format(d);
@@ -1093,7 +1176,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       String value = code.substring("new Date(".length(), code.length() - 1);
       Node arg = null;
       try {
-        double n = Integer.parseInt(value);
+        double n = Double.parseDouble(value);
         arg = IR.number(n);
       } catch (NumberFormatException e) {
         // NOOP.
@@ -1109,7 +1192,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     }
 
     try {
-      double n = Integer.parseInt(code);
+      double n = Double.parseDouble(code);
       return IR.number(n);
     } catch (NumberFormatException e) {
       // NOOP.
@@ -1127,7 +1210,7 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
     return replacement;
   }
 
-  private Optional<Integer> tryGetInteger(Node arg) {
+  private Optional<Double> tryGetNumber(Node arg) {
     double d;
     if (arg.isNumber()) {
       d = arg.getDouble();
@@ -1145,6 +1228,17 @@ class PeepholeUnfuck extends AbstractPeepholeOptimization {
       return Optional.empty();
     }
 
+    return Optional.of(d);
+  }
+
+  private Optional<Integer> tryGetInteger(Node arg) {
+    Optional<Double> n = tryGetNumber(arg);
+
+    if (!n.isPresent()) {
+      return Optional.empty();
+    }
+
+    double d = n.get();
     int i = (int) d;
     if (i != d) {
       return Optional.empty();
